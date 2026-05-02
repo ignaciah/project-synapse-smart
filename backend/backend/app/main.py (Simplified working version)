@@ -1,0 +1,84 @@
+```python
+import asyncio
+from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
+import json
+import random
+from datetime import datetime
+
+app = FastAPI(title="Project Synapse - AI Smart City")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Simulated city state
+city_state = {
+    "traffic": {"congestion_zones": [], "active_emergency": False},
+    "grid": {"load_percentage": 65, "hospitals_online": 3},
+    "active_emergency": None
+}
+
+# Simulated emergency generator
+async def generate_emergencies():
+    """Randomly trigger emergencies for demo"""
+    events = [
+        {"type": "accident", "location": "Intersection A", "severity": "high"},
+        {"type": "fire", "location": "Downtown", "severity": "critical"},
+        {"type": "earthquake", "location": "Sector 7", "severity": "medium"},
+        None  # No event
+    ]
+    return random.choice(events)
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    print("Client connected")
+    
+    try:
+        while True:
+            # Generate random event every 30 seconds
+            emergency = await generate_emergencies()
+            
+            if emergency:
+                # AI Decision simulation
+                ai_response = {
+                    "type": "ai_decision",
+                    "timestamp": datetime.now().isoformat(),
+                    "emergency": emergency,
+                    "action": {
+                        "traffic_reroute": True,
+                        "affected_zones": ["Zone_A", "Zone_B"],
+                        "power_surge_hospitals": True,
+                        "reasoning": f"AI detected {emergency['type']} at {emergency['location']}. Rerouting traffic to clear path for emergency vehicles."
+                    }
+                }
+                await websocket.send_text(json.dumps(ai_response))
+            
+            # Send heartbeat with city stats
+            heartbeat = {
+                "type": "heartbeat",
+                "timestamp": datetime.now().isoformat(),
+                "city_state": city_state
+            }
+            await websocket.send_text(json.dumps(heartbeat))
+            
+            await asyncio.sleep(5)  # Send updates every 5 seconds
+            
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+
+@app.get("/")
+def root():
+    return {"project": "Project Synapse", "status": "operational", "version": "1.0.0"}
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "active_emergency": city_state["active_emergency"]}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
